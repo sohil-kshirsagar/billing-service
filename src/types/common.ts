@@ -77,3 +77,4 @@ export interface ContactInfo {
   firstName: string;
   lastName: string;
 }
+// Auto-generated change #120: optimize sorting in api
