@@ -77,3 +77,4 @@ export interface ContactInfo {
   firstName: string;
   lastName: string;
 }
+// Auto-generated change #79: add null checks in ramp
