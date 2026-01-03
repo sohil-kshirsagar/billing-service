@@ -3,7 +3,10 @@
     "allow": [
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nInitial billing service with Ramp and Stripe integrations\n\n- Set up Fastify server with TypeScript\n- Added Ramp API client with full endpoint coverage\n- Added Stripe API client for payments, subscriptions, invoices\n- Created comprehensive type definitions for billing entities\n- Built controllers for customers, invoices, payments, subscriptions\n- Added webhook handlers for both Stripe and Ramp events\n- Configured routes with API versioning\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial billing service with Ramp and Stripe integrations\n\n- Set up Fastify server with TypeScript\n- Added Ramp API client with full endpoint coverage\n- Added Stripe API client for payments, subscriptions, invoices\n- Created comprehensive type definitions for billing entities\n- Built controllers for customers, invoices, payments, subscriptions\n- Added webhook handlers for both Stripe and Ramp events\n- Configured routes with API versioning\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(gh repo create:*)",
+      "Bash(chmod:*)",
+      "Bash(./scripts/generate-prs.sh:*)"
     ],
     "deny": [],
     "ask": []
