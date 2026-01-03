@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { rampClient } from '../integrations/ramp/ramp.client';
+import { rampSyncService, TransactionSyncOptions } from '../services/ramp-sync.service';
 import { logger } from '../utils/logger';
 import {
   RampUser,
@@ -1288,6 +1289,238 @@ export class RampController {
 
   private async handleBillEvent(event: any): Promise<void> {
     logger.info('Handling bill event', { type: event.type, billId: event.data?.id });
+  }
+
+  // ==================== Data Sync Operations ====================
+
+  /**
+   * Performs a full synchronization of all Ramp data for a business.
+   * This endpoint fetches and stores all transactions, bills, and reimbursements.
+   *
+   * Note: This is an expensive operation and should be used sparingly.
+   * For regular updates, use the incremental sync endpoint instead.
+   */
+  async fullSync(
+    request: FastifyRequest<{
+      Params: BusinessParams;
+      Body: {
+        startDate?: string;
+        endDate?: string;
+        includeCleared?: boolean;
+        includePending?: boolean;
+        batchSize?: number;
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { businessId } = request.params;
+      const { startDate, endDate, includeCleared, includePending, batchSize } = request.body || {};
+
+      logger.info('Starting full Ramp data sync', { businessId });
+
+      const options: TransactionSyncOptions = {
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+        includeCleared: includeCleared ?? true,
+        includePending: includePending ?? true,
+        batchSize: batchSize || 100,
+      };
+
+      const result = await rampSyncService.fullSync(businessId, options);
+
+      logger.info('Full sync completed', {
+        businessId,
+        syncedTransactions: result.syncedTransactions,
+        syncedBills: result.syncedBills,
+        syncedReimbursements: result.syncedReimbursements,
+        errorCount: result.errors.length,
+      });
+
+      return reply.status(200).send({
+        success: result.success,
+        data: {
+          syncedTransactions: result.syncedTransactions,
+          syncedBills: result.syncedBills,
+          syncedReimbursements: result.syncedReimbursements,
+          syncedAt: result.syncedAt,
+          errors: result.errors.length > 0 ? result.errors : undefined,
+        },
+      });
+    } catch (error) {
+      logger.error('Full sync failed', { error });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'SYNC_ERROR', message: 'Failed to perform full sync' },
+      });
+    }
+  }
+
+  /**
+   * Performs an incremental sync since the last sync time.
+   * This is more efficient than a full sync for regular updates.
+   */
+  async incrementalSync(
+    request: FastifyRequest<{
+      Params: BusinessParams;
+      Body: { lastSyncTime: string };
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { businessId } = request.params;
+      const { lastSyncTime } = request.body;
+
+      if (!lastSyncTime) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'lastSyncTime is required' },
+        });
+      }
+
+      logger.info('Starting incremental Ramp sync', { businessId, lastSyncTime });
+
+      const result = await rampSyncService.incrementalSync(businessId, new Date(lastSyncTime));
+
+      logger.info('Incremental sync completed', {
+        businessId,
+        syncedTransactions: result.syncedTransactions,
+        syncedBills: result.syncedBills,
+        syncedReimbursements: result.syncedReimbursements,
+      });
+
+      return reply.status(200).send({
+        success: result.success,
+        data: {
+          syncedTransactions: result.syncedTransactions,
+          syncedBills: result.syncedBills,
+          syncedReimbursements: result.syncedReimbursements,
+          syncedAt: result.syncedAt,
+          errors: result.errors.length > 0 ? result.errors : undefined,
+        },
+      });
+    } catch (error) {
+      logger.error('Incremental sync failed', { error });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'SYNC_ERROR', message: 'Failed to perform incremental sync' },
+      });
+    }
+  }
+
+  /**
+   * Gets the current sync status for a business.
+   * Returns information about the last sync time and totals.
+   */
+  async getSyncStatus(
+    request: FastifyRequest<{ Params: BusinessParams }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { businessId } = request.params;
+
+      logger.info('Getting sync status', { businessId });
+
+      const status = await rampSyncService.getSyncStatus(businessId);
+
+      return reply.status(200).send({
+        success: true,
+        data: status,
+      });
+    } catch (error) {
+      logger.error('Failed to get sync status', { error });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'SYNC_ERROR', message: 'Failed to get sync status' },
+      });
+    }
+  }
+
+  /**
+   * Validates the integrity of synced transaction data.
+   * Compares local data against the Ramp API to detect discrepancies.
+   */
+  async validateTransactionIntegrity(
+    request: FastifyRequest<{ Params: BusinessParams }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { businessId } = request.params;
+
+      logger.info('Validating transaction integrity', { businessId });
+
+      const result = await rampSyncService.validateTransactionIntegrity(businessId);
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          valid: result.valid,
+          discrepancyCount: result.discrepancies.length,
+          discrepancies: result.discrepancies.length > 0 ? result.discrepancies : undefined,
+        },
+      });
+    } catch (error) {
+      logger.error('Failed to validate transaction integrity', { error });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Failed to validate transaction integrity' },
+      });
+    }
+  }
+
+  /**
+   * Syncs only transactions for a business.
+   * Useful when you only need transaction data without bills/reimbursements.
+   */
+  async syncTransactionsOnly(
+    request: FastifyRequest<{
+      Params: BusinessParams;
+      Body: {
+        startDate?: string;
+        endDate?: string;
+        includeCleared?: boolean;
+        includePending?: boolean;
+        batchSize?: number;
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const { businessId } = request.params;
+      const { startDate, endDate, includeCleared, includePending, batchSize } = request.body || {};
+
+      logger.info('Starting transaction-only sync', { businessId });
+
+      const options: TransactionSyncOptions = {
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+        includeCleared: includeCleared ?? true,
+        includePending: includePending ?? true,
+        batchSize: batchSize || 100,
+      };
+
+      const result = await rampSyncService.syncTransactions(businessId, options);
+
+      logger.info('Transaction sync completed', {
+        businessId,
+        synced: result.synced,
+        errorCount: result.errors.length,
+      });
+
+      return reply.status(200).send({
+        success: result.errors.length === 0,
+        data: {
+          syncedTransactions: result.synced,
+          errors: result.errors.length > 0 ? result.errors : undefined,
+        },
+      });
+    } catch (error) {
+      logger.error('Transaction sync failed', { error });
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'SYNC_ERROR', message: 'Failed to sync transactions' },
+      });
+    }
   }
 }
 
