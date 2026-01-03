@@ -70,4 +70,12 @@ export async function rampRoutes(fastify: FastifyInstance, options: FastifyPlugi
 
   // Webhooks
   fastify.post('/webhooks/ramp', rampController.handleWebhook.bind(rampController));
+
+  // Data Sync Operations
+  // These endpoints allow synchronization of Ramp data with the local database
+  fastify.post('/businesses/:businessId/sync/full', rampController.fullSync.bind(rampController));
+  fastify.post('/businesses/:businessId/sync/incremental', rampController.incrementalSync.bind(rampController));
+  fastify.get('/businesses/:businessId/sync/status', rampController.getSyncStatus.bind(rampController));
+  fastify.post('/businesses/:businessId/sync/validate', rampController.validateTransactionIntegrity.bind(rampController));
+  fastify.post('/businesses/:businessId/sync/transactions', rampController.syncTransactionsOnly.bind(rampController));
 }
