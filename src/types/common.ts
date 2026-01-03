@@ -77,3 +77,4 @@ export interface ContactInfo {
   firstName: string;
   lastName: string;
 }
+// Auto-generated change #43: fix sorting in customer
